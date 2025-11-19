@@ -69,14 +69,19 @@ public class SimpleLauncher
 
     private void ScanRegisterAssemblyBehaviours()
     {
-        string dllDir = Path.GetDirectoryName(AppContext.BaseDirectory);
+        // Get the directory where the executing assembly (Luban.dll) is located
+        string dllDir = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location);
+        if (string.IsNullOrEmpty(dllDir))
+        {
+            dllDir = AppContext.BaseDirectory;
+        }
         foreach (var dllFile in Directory.GetFiles(dllDir, "*.dll", SearchOption.TopDirectoryOnly))
         {
             string dllName = Path.GetFileNameWithoutExtension(dllFile);
             if (dllName.Contains("Luban") && AppDomain.CurrentDomain.GetAssemblies().All(a => a.GetName().Name != dllName))
             {
                 s_logger.Trace("load dll:{dll}", dllFile);
-                Assembly.Load(dllName);
+                Assembly.LoadFrom(dllFile);
             }
         }
 

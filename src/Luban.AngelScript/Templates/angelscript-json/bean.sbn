@@ -1,0 +1,35 @@
+{{~
+    parent_def_type = __bean.parent_def_type
+    export_fields = __bean.export_fields
+    hierarchy_export_fields = __bean.hierarchy_export_fields
+~}}
+
+{{~if __bean.comment != '' ~}}
+/*
+ * {{escape_comment __bean.comment}}
+ */
+{{~end~}}
+{{~if __bean.is_value_type~}}
+USTRUCT()
+struct F{{__name}}
+{{~else~}}
+class {{__name}}
+{{~end~}}
+{
+    {{~ for field in hierarchy_export_fields
+        fieldName = format_property_name __code_style field.name
+     ~}}
+    {{~if field.comment != '' ~}}
+    // {{escape_comment field.comment}}
+    {{~end~}}
+    {{~if __bean.is_value_type~}}
+    {{~default_val = default_value field.ctype~}}
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "{{__name}}", Meta = (DisplayName = "{{escape_comment field.comment}}"))
+    {{declaring_type_name field.ctype}} {{fieldName}}{{if default_val != ''}} = {{default_val}}{{end}};
+    {{~else~}}
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "{{__name}}", Meta = (DisplayName = "{{escape_comment field.comment}}"))
+    {{declaring_type_name field.ctype}} {{fieldName}};
+    {{~end~}}
+    {{~end~}}
+}
+

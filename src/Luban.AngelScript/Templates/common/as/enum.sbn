@@ -1,0 +1,22 @@
+{{~
+    comment = __enum.comment
+    items = __enum.items
+~}}
+
+{{~if comment != '' ~}}
+/*
+ * {{escape_comment comment}}
+ */
+{{~end~}}
+UENUM()
+enum {{__name}}
+{
+    {{~ for item in items ~}}
+    {{~if item.comment != '' ~}}
+    {{format_enum_item_name __code_style item.name}}{{if item.value != null}} = {{item.value}}{{end}} UMETA(DisplayName = "{{escape_comment item.comment_or_alias}}"){{if !for.last}},{{end}}
+    {{~else~}}
+    {{format_enum_item_name __code_style item.name}}{{if item.value != null}} = {{item.value}}{{end}}{{if !for.last}},{{end}}
+    {{~end~}}
+    {{~end~}}
+}
+

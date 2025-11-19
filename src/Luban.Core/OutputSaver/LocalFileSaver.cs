@@ -39,7 +39,16 @@ public class LocalFileSaver : OutputSaverBase
 
     public override void SaveFile(OutputFileManifest fileManifest, string outputDir, OutputFile outputFile)
     {
-        string fullOutputPath = $"{outputDir}/{outputFile.File}";
+        string fullOutputPath;
+        // 如果 outputFile.File 是绝对路径或包含相对路径（如 ..），则直接使用，不合并 outputDir
+        if (Path.IsPathRooted(outputFile.File) || outputFile.File.Contains(".."))
+        {
+            fullOutputPath = outputFile.File;
+        }
+        else
+        {
+            fullOutputPath = $"{outputDir}/{outputFile.File}";
+        }
         Directory.CreateDirectory(Path.GetDirectoryName(fullOutputPath));
         string tag = File.Exists(fullOutputPath) ? "overwrite" : "new";
         if (FileUtil.WriteAllBytes(fullOutputPath, outputFile.GetContentBytes()))

@@ -1,0 +1,86 @@
+{{~
+    key_type = __table.key_ttype
+    value_type =  __table.value_ttype
+~}}
+
+{{~if __table.comment != '' ~}}
+/*
+ * {{escape_comment __table.comment}}
+ */
+{{~end~}}
+class {{__name}}
+{
+    {{~if __table.is_map_table ~}}
+    private TMap<{{declaring_type_name __key_type}}, {{declaring_type_name __value_type}}> DataMap;
+    private TArray<{{declaring_type_name __value_type}}> DataList;
+    
+    {{__name}}(TSharedPtr<FJsonObject> JsonObject)
+    {
+        const TArray<TSharedPtr<FJsonValue>> JsonArray = JsonObject->GetArrayField("value");
+        DataMap = TMap<{{declaring_type_name __key_type}}, {{declaring_type_name __value_type}}>();
+        DataList = TArray<{{declaring_type_name __value_type}}>();
+        DataList.Reserve(JsonArray.Num());
+        
+        for (int i = 0; i < JsonArray.Num(); i++)
+        {
+            TSharedPtr<FJsonObject> JsonItem = JsonArray[i]->AsObject();
+            {{declaring_type_name __value_type}} _v;
+            {{deserialize_field '_v' 'JsonItem' '' __value_type}}
+            DataList.Add(_v);
+            DataMap.Add(_v.{{format_property_name __code_style __table.index_field.name}}, _v);
+        }
+    }
+
+    {{declaring_type_name __value_type}} GetOrDefault({{declaring_type_name __key_type}} key)
+    {
+        {{declaring_type_name __value_type}} Value;
+        if (DataMap.Find(key, Value))
+        {
+            return Value;
+        }
+        return {{declaring_type_name __value_type}}();
+    }
+
+    {{declaring_type_name __value_type}} Get({{declaring_type_name __key_type}} key)
+    {
+        return DataMap[key];
+    }
+
+    {{~else if __table.is_list_table ~}}
+    private TArray<{{declaring_type_name __value_type}}> DataList;
+
+    {{__name}}(TSharedPtr<FJsonObject> JsonObject)
+    {
+        const TArray<TSharedPtr<FJsonValue>> JsonArray = JsonObject->GetArrayField("value");
+        DataList = TArray<{{declaring_type_name __value_type}}>();
+        DataList.Reserve(JsonArray.Num());
+        
+        for (int i = 0; i < JsonArray.Num(); i++)
+        {
+            TSharedPtr<FJsonObject> JsonItem = JsonArray[i]->AsObject();
+            {{declaring_type_name __value_type}} _v;
+            {{deserialize_field '_v' 'JsonItem' '' __value_type}}
+            DataList.Add(_v);
+        }
+    }
+
+    {{~else~}}
+    private {{declaring_type_name __value_type}} Data;
+
+    {{declaring_type_name __value_type}} GetData()
+    {
+        return Data;
+    }
+
+    {{__name}}(TSharedPtr<FJsonObject> JsonObject)
+    {
+        const TArray<TSharedPtr<FJsonValue>> JsonArray = JsonObject->GetArrayField("value");
+        if (JsonArray.Num() != 1)
+        {
+            throw("table mode=one, but size != 1");
+        }
+        {{deserialize_field 'Data' 'JsonArray[0]->AsObject()' '' __value_type}}
+    }
+    {{~end~}}
+}
+
