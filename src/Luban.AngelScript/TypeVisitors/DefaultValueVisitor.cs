@@ -86,10 +86,12 @@ public class DefaultValueVisitor : ITypeFuncVisitor<string>
 
     public string Accept(TBean type)
     {
-        // For structs, return default constructor with F prefix
+        // For structs (value types), don't generate default value
+        // Let the compiler use the default constructor automatically
+        // This applies to both nested structs and external types (with TypeMapper)
         if (type.DefBean.IsValueType)
         {
-            return $"F{type.DefBean.Name}()";
+            return "";
         }
         return "null";
     }

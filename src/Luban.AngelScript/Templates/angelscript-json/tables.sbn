@@ -10,7 +10,7 @@ class UCfgMgr : UScriptGameInstanceSubsystem
     {{~end~}}
     {{~
         cfg_name = table.value_ttype.def_bean.name
-        struct_type_name = 'F' + cfg_name
+        struct_type_name = declaring_type_name table.value_ttype
         is_union = table.is_union_index
         # 检查 index_list 是否有多个元素（联合主键需要至少2个字段）
         has_multiple_indexes = false
@@ -75,7 +75,7 @@ class UCfgMgr : UScriptGameInstanceSubsystem
     {{~for table in __tables ~}}
     {{~
         cfg_name = table.value_ttype.def_bean.name
-        struct_type_name = 'F' + cfg_name
+        struct_type_name = declaring_type_name table.value_ttype
         value_var_name = cfg_name
         is_union = table.is_union_index
         # 确保只有真正的联合主键（index_list 长度 > 1）才生成 Make 函数
@@ -176,7 +176,7 @@ class UCfgMgr : UScriptGameInstanceSubsystem
         {{~for table in __tables ~}}
         {{~
             cfg_name = table.value_ttype.def_bean.name
-            struct_type_name = 'F' + cfg_name
+            struct_type_name = declaring_type_name table.value_ttype
             value_var_name = cfg_name
             is_union = table.is_union_index
             # 检查 index_list 是否有多个元素（联合主键需要至少2个字段）

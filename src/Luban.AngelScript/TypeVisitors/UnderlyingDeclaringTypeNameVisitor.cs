@@ -79,7 +79,13 @@ public class UnderlyingDeclaringTypeNameVisitor : ITypeFuncVisitor<string>
     {
         // In Angelscript, when bean and struct/class are in the same file (same namespace),
         // we use the simple bean name without namespace prefix
-        return type.DefBean.TypeNameWithTypeMapper() ?? type.DefBean.Name;
+        // For value types (structs), add "F" prefix
+        string name = type.DefBean.TypeNameWithTypeMapper() ?? type.DefBean.Name;
+        if (type.DefBean.IsValueType && !name.StartsWith("F"))
+        {
+            return "F" + name;
+        }
+        return name;
     }
 
     public string Accept(TArray type)

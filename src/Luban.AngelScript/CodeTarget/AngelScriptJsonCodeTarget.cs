@@ -119,11 +119,38 @@ public class AngelScriptJsonCodeTarget : AngelScriptCodeTargetBase
             }
         }
 
-        // Then generate beans
-        for (int i = 0; i < sortedBeans.Count; i++)
+        // Then generate beans (skip beans with TypeMapper as they are external types)
+        var beansToGenerate = new List<DefBean>();
+        string targetName = ctx.Target.Name;
+        string codeTargetName = Name;
+
+        foreach (var bean in sortedBeans)
         {
-            GenerateBean(ctx, sortedBeans[i], writer);
-            if (i < sortedBeans.Count - 1)
+            // Skip beans that have TypeMapper for the current target/codeTarget
+            // These are external types (like UE's native FVector, FVector2D, FVector4)
+            bool shouldSkip = false;
+            if (bean.TypeMappers != null && bean.TypeMappers.Count > 0)
+            {
+                foreach (var mapper in bean.TypeMappers)
+                {
+                    if (mapper.Targets.Contains(targetName) && mapper.CodeTargets.Contains(codeTargetName))
+                    {
+                        shouldSkip = true;
+                        break;
+                    }
+                }
+            }
+
+            if (!shouldSkip)
+            {
+                beansToGenerate.Add(bean);
+            }
+        }
+
+        for (int i = 0; i < beansToGenerate.Count; i++)
+        {
+            GenerateBean(ctx, beansToGenerate[i], writer);
+            if (i < beansToGenerate.Count - 1)
             {
                 writer.Write("");
                 writer.Write("");
