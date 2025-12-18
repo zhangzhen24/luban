@@ -1,0 +1,43 @@
+{{~
+    parent_def_type = __bean.parent_def_type
+    export_fields = __bean.export_fields
+    hierarchy_export_fields = __bean.hierarchy_export_fields
+~}}
+{{~if __bean.comment != '' ~}}
+/**
+ * {{escape_comment __bean.comment}}
+ */
+{{~end~}}
+export {{if __bean.is_abstract_type}}abstract {{end}}class {{__name}}{{if parent_def_type}} extends {{parent_def_type.name}}{{end}} {
+{{~if __bean.is_abstract_type~}}
+    static ConstructorFrom(_json_: any): {{__name}} {
+        switch (_json_["$type"]) {
+        {{~ for child in __bean.hierarchy_not_abstract_children~}}
+            case '{{impl_data_type child __bean}}': return new {{child.name}}(_json_)
+        {{~end~}}
+            default: throw new Error(`Unknown type: ${_json_["$type"]}`)
+        }
+    }
+{{~end~}}
+
+    constructor(_json_: any) {
+        {{~if parent_def_type~}}
+        super(_json_)
+        {{~end~}}
+        {{~ for field in export_fields ~}}
+        {{~if !field.ctype.is_nullable~}}
+        if (_json_.{{field.name}} === undefined) { throw new Error('Field {{field.name}} is required') }
+        {{~end~}}
+        {{deserialize ('this.' + format_field_name __code_style field.name) ('_json_.' + field.name) field.ctype}}
+        {{~end~}}
+    }
+
+    {{~ for field in export_fields ~}}
+{{~if field.comment != '' ~}}
+    /**
+     * {{escape_comment field.comment}}
+     */
+{{~end~}}
+    readonly {{format_field_name __code_style field.name}}: {{declaring_type_name field.ctype}}
+    {{~end~}}
+}

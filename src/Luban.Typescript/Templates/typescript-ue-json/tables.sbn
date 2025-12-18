@@ -1,0 +1,193 @@
+{{~## CfgMgr - Configuration Manager ~}}
+{{generate_imports __tables}}
+type JsonLoader = (file: string) => any
+
+/**
+ * Configuration Manager
+ * Auto-generated, do not modify manually
+ */
+export class CfgMgr {
+    private static _Instance: CfgMgr | undefined
+    private _basePath: string = ''
+
+    /**
+     * Get singleton instance
+     * @throws Error if not initialized
+     */
+    public static Get(): CfgMgr {
+        if (!CfgMgr._Instance) {
+            throw new Error('CfgMgr not initialized. Call CfgMgr.Initialize() first.')
+        }
+        return CfgMgr._Instance
+    }
+
+    /**
+     * Initialize CfgMgr and load all configurations
+     * @param loader JSON loader function
+     * @param basePath Base path for JSON files (e.g., 'Config/gen')
+     */
+    public static Initialize(loader: JsonLoader, basePath: string = ''): CfgMgr {
+        if (!CfgMgr._Instance) {
+            CfgMgr._Instance = new CfgMgr()
+            CfgMgr._Instance._basePath = basePath
+            CfgMgr._Instance.LoadConfigs(loader)
+        }
+        return CfgMgr._Instance
+    }
+
+    /**
+     * Check if CfgMgr is initialized
+     */
+    public static IsInitialized(): boolean {
+        return CfgMgr._Instance !== undefined
+    }
+
+    private constructor() {}
+
+    {{~## Data storage for each table ~}}
+    {{~for table in __tables ~}}
+    {{~
+        value_type = table.value_ttype
+        key_type = table.key_ttype
+        table_name = format_property_name __code_style table.name
+        is_union = table.is_union_index
+        # Check if it's a real union key (more than 1 index field)
+        index_count = 0
+        for idx in table.index_list
+            index_count = index_count + 1
+        end
+        is_real_union = is_union && index_count > 1
+        # Union key tables in Luban are LIST mode with is_union_index=true
+        is_union_key_table = table.is_list_table && is_real_union
+    ~}}
+    {{~if table.is_map_table ~}}
+    private _{{table_name}}Map: Map<{{declaring_type_name key_type}}, {{declaring_type_name value_type}}> = new Map()
+    {{~else if is_union_key_table ~}}
+    private _{{table_name}}Map: Map<string, {{declaring_type_name value_type}}> = new Map()
+    {{~else if table.is_list_table ~}}
+    private _{{table_name}}List: {{declaring_type_name value_type}}[] = []
+    {{~else~}}
+    private _{{table_name}}Data: {{declaring_type_name value_type}} | undefined
+    {{~end~}}
+    {{~end~}}
+
+    /**
+     * Get full path for a JSON file
+     */
+    private _GetPath(file: string): string {
+        return this._basePath ? `${this._basePath}/${file}` : file
+    }
+
+    /**
+     * Load all configurations
+     * @param loader JSON loader function
+     */
+    public LoadConfigs(loader: JsonLoader): void {
+        {{~for table in __tables ~}}
+        this._Load{{table.name}}(loader(this._GetPath('{{table.output_data_file}}.json')))
+        {{~end~}}
+    }
+
+    {{~## Load methods for each table ~}}
+    {{~for table in __tables ~}}
+    {{~
+        value_type = table.value_ttype
+        key_type = table.key_ttype
+        table_name = format_property_name __code_style table.name
+        index_field_name = table.index_field?.name
+        is_union = table.is_union_index
+        # Check if it's a real union key (more than 1 index field)
+        index_count = 0
+        for idx in table.index_list
+            index_count = index_count + 1
+        end
+        is_real_union = is_union && index_count > 1
+        # Union key tables in Luban are LIST mode with is_union_index=true
+        is_union_key_table = table.is_list_table && is_real_union
+    ~}}
+    private _Load{{table.name}}(_json_: any): void {
+        {{~if table.is_map_table ~}}
+        this._{{table_name}}Map.clear()
+        for (const _json2_ of _json_) {
+            {{~if value_type.def_bean.is_abstract_type~}}
+            const item = {{value_type.def_bean.full_name}}.ConstructorFrom(_json2_)
+            {{~else~}}
+            const item = new {{value_type.def_bean.full_name}}(_json2_)
+            {{~end~}}
+            this._{{table_name}}Map.set(item.{{format_field_name __code_style index_field_name}}, item)
+        }
+        {{~else if is_union_key_table ~}}
+        this._{{table_name}}Map.clear()
+        for (const _json2_ of _json_) {
+            {{~if value_type.def_bean.is_abstract_type~}}
+            const item = {{value_type.def_bean.full_name}}.ConstructorFrom(_json2_)
+            {{~else~}}
+            const item = new {{value_type.def_bean.full_name}}(_json2_)
+            {{~end~}}
+            this._{{table_name}}Map.set({{make_union_key __code_style table 'item'}}, item)
+        }
+        {{~else if table.is_list_table ~}}
+        this._{{table_name}}List = []
+        for (const _json2_ of _json_) {
+            {{~if value_type.def_bean.is_abstract_type~}}
+            const item = {{value_type.def_bean.full_name}}.ConstructorFrom(_json2_)
+            {{~else~}}
+            const item = new {{value_type.def_bean.full_name}}(_json2_)
+            {{~end~}}
+            this._{{table_name}}List.push(item)
+        }
+        {{~else~}}
+        if (_json_.length !== 1) { throw new Error('Table {{table.name}} mode=one, but size != 1') }
+        {{~if value_type.def_bean.is_abstract_type~}}
+        this._{{table_name}}Data = {{value_type.def_bean.full_name}}.ConstructorFrom(_json_[0])
+        {{~else~}}
+        this._{{table_name}}Data = new {{value_type.def_bean.full_name}}(_json_[0])
+        {{~end~}}
+        {{~end~}}
+    }
+    {{~end~}}
+
+    {{~## Getter methods for each table ~}}
+    {{~for table in __tables ~}}
+    {{~
+        value_type = table.value_ttype
+        key_type = table.key_ttype
+        table_name = format_property_name __code_style table.name
+        is_union = table.is_union_index
+        # Check if it's a real union key (more than 1 index field)
+        index_count = 0
+        for idx in table.index_list
+            index_count = index_count + 1
+        end
+        is_real_union = is_union && index_count > 1
+        # Union key tables in Luban are LIST mode with is_union_index=true
+        is_union_key_table = table.is_list_table && is_real_union
+    ~}}
+{{~if table.comment != '' ~}}
+    /**
+     * {{escape_comment table.comment}}
+     */
+{{~end~}}
+    {{~if table.is_map_table ~}}
+    public Get{{table.name}}(key: {{declaring_type_name key_type}}): {{declaring_type_name value_type}} | undefined {
+        return this._{{table_name}}Map.get(key)
+    }
+    {{~else if is_union_key_table ~}}
+    public Get{{table.name}}({{union_key_params __code_style table}}): {{declaring_type_name value_type}} | undefined {
+        return this._{{table_name}}Map.get({{make_union_key_from_params __code_style table}})
+    }
+    {{~else if table.is_list_table ~}}
+    public Get{{table.name}}ByIndex(index: number): {{declaring_type_name value_type}} | undefined {
+        return this._{{table_name}}List[index]
+    }
+
+    public GetAll{{table.name}}(): {{declaring_type_name value_type}}[] {
+        return this._{{table_name}}List
+    }
+    {{~else~}}
+    public Get{{table.name}}(): {{declaring_type_name value_type}} {
+        return this._{{table_name}}Data!
+    }
+    {{~end~}}
+    {{~end~}}
+}

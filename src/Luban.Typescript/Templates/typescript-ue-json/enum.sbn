@@ -1,0 +1,19 @@
+{{~
+    comment = __enum.comment
+    items = __enum.items
+~}}
+{{~if comment != '' ~}}
+/**
+ * {{escape_comment comment}}
+ */
+{{~end~}}
+export enum {{__name}} {
+    {{~ for item in items ~}}
+{{~if item.comment != '' ~}}
+    /**
+     * {{escape_comment item.comment}}
+     */
+{{~end~}}
+    {{item.name}} = {{item.value}},
+    {{~end~}}
+}

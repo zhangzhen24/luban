@@ -7,7 +7,7 @@ echo.
 
 set LUBAN_SRC_DIR=%~dp0src
 set BUILD_CONFIG=Release
-set TARGET_DIR=F:\Projects\EmberGuardian\trunk\Tools2\Exe\Luban
+set TARGET_DIR=F:\Projects\WarlockWars\Tools\Exe\Luban
 
 cd /d "%LUBAN_SRC_DIR%"
 
@@ -41,10 +41,16 @@ echo 复制 Luban.AngelScript.dll...
 copy /Y "%OUTPUT_DIR%Luban.AngelScript.dll" "%TARGET_DIR%\" >nul
 copy /Y "%OUTPUT_DIR%Luban.AngelScript.pdb" "%TARGET_DIR%\" >nul 2>nul
 
-echo 复制模板文件...
+echo 复制 Luban.Typescript.dll...
+copy /Y "%OUTPUT_DIR%Luban.Typescript.dll" "%TARGET_DIR%\" >nul
+copy /Y "%OUTPUT_DIR%Luban.Typescript.pdb" "%TARGET_DIR%\" >nul 2>nul
+
+echo 复制模板文件（从源目录复制以确保最新）...
 if not exist "%TARGET_DIR%\Templates" mkdir "%TARGET_DIR%\Templates"
-xcopy /E /Y /I "%OUTPUT_DIR%Templates\angelscript-json" "%TARGET_DIR%\Templates\angelscript-json\" >nul 2>nul
-xcopy /E /Y /I "%OUTPUT_DIR%Templates\common\as" "%TARGET_DIR%\Templates\common\as\" >nul 2>nul
+xcopy /E /Y /I "%LUBAN_SRC_DIR%\Luban.AngelScript\Templates\angelscript-json" "%TARGET_DIR%\Templates\angelscript-json\" >nul 2>nul
+xcopy /E /Y /I "%LUBAN_SRC_DIR%\Luban.AngelScript\Templates\common\as" "%TARGET_DIR%\Templates\common\as\" >nul 2>nul
+xcopy /E /Y /I "%LUBAN_SRC_DIR%\Luban.Typescript\Templates\typescript-ue-json" "%TARGET_DIR%\Templates\typescript-ue-json\" >nul 2>nul
+xcopy /E /Y /I "%LUBAN_SRC_DIR%\Luban.Typescript\Templates\common\ts" "%TARGET_DIR%\Templates\common\ts\" >nul 2>nul
 
 echo.
 echo [3/3] 完成！
