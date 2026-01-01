@@ -5,31 +5,39 @@
 ~}}
 
 {{~if __bean.comment != '' ~}}
-/*
+/**
  * {{escape_comment __bean.comment}}
  */
 {{~end~}}
 {{~if __bean.is_value_type~}}
 USTRUCT()
 struct F{{__name}}
-{{~else~}}
-class {{__name}}
-{{~end~}}
 {
     {{~ for field in hierarchy_export_fields
         fieldName = format_property_name __code_style field.name
+        fieldType = declaring_type_name field.ctype
+        default_val = default_value field.ctype
+     ~}}
+    {{~if field.comment != '' ~}}
+    /** {{escape_comment field.comment}} */
+    {{~end~}}
+    UPROPERTY()
+    {{fieldType}} {{fieldName}}{{if default_val != ''}} = {{default_val}}{{end}};
+
+    {{~end~}}
+}
+{{~else~}}
+class {{__name}}
+{
+    {{~ for field in hierarchy_export_fields
+        fieldName = format_property_name __code_style field.name
+        fieldType = declaring_type_name field.ctype
      ~}}
     {{~if field.comment != '' ~}}
     // {{escape_comment field.comment}}
     {{~end~}}
-    {{~if __bean.is_value_type~}}
-    {{~default_val = default_value field.ctype~}}
-    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "{{__name}}", Meta = (DisplayName = "{{escape_comment field.comment}}"))
-    {{declaring_type_name field.ctype}} {{fieldName}}{{if default_val != ''}} = {{default_val}}{{end}};
-    {{~else~}}
-    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "{{__name}}", Meta = (DisplayName = "{{escape_comment field.comment}}"))
-    {{declaring_type_name field.ctype}} {{fieldName}};
-    {{~end~}}
+    {{fieldType}} {{fieldName}};
     {{~end~}}
 }
+{{~end~}}
 

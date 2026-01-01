@@ -41,6 +41,9 @@
       <None Update="Templates\angelscript-json\bean.sbn">
         <CopyToOutputDirectory>Always</CopyToOutputDirectory>
       </None>
+      <None Update="Templates\angelscript-json\enum.sbn">
+        <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+      </None>
       <None Update="Templates\angelscript-json\table.sbn">
         <CopyToOutputDirectory>Always</CopyToOutputDirectory>
       </None>

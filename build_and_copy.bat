@@ -7,7 +7,7 @@ echo.
 
 set LUBAN_SRC_DIR=%~dp0src
 set BUILD_CONFIG=Release
-set TARGET_DIR=F:\Projects\WarlockWars\Tools\Exe\Luban
+set TARGET_DIR=F:\Projects\EmberGuardian\trunk\Tools\Exe\Luban
 
 cd /d "%LUBAN_SRC_DIR%"
 
@@ -40,6 +40,10 @@ copy /Y "%OUTPUT_DIR%Luban.pdb" "%TARGET_DIR%\" >nul 2>nul
 echo 复制 Luban.AngelScript.dll...
 copy /Y "%OUTPUT_DIR%Luban.AngelScript.dll" "%TARGET_DIR%\" >nul
 copy /Y "%OUTPUT_DIR%Luban.AngelScript.pdb" "%TARGET_DIR%\" >nul 2>nul
+
+echo 复制 Luban.DataTarget.Builtin.dll...
+copy /Y "%OUTPUT_DIR%Luban.DataTarget.Builtin.dll" "%TARGET_DIR%\" >nul
+copy /Y "%OUTPUT_DIR%Luban.DataTarget.Builtin.pdb" "%TARGET_DIR%\" >nul 2>nul
 
 echo 复制 Luban.Typescript.dll...
 copy /Y "%OUTPUT_DIR%Luban.Typescript.dll" "%TARGET_DIR%\" >nul

@@ -33,7 +33,21 @@ public class JsonDataTarget : DataTargetBase
 
     public static bool UseCompactJson => EnvManager.Current.GetBoolOptionOrDefault("json", "compact", true, false);
 
-    protected virtual JsonDataVisitor ImplJsonDataVisitor => JsonDataVisitor.Ins;
+    /// <summary>
+    /// 当为 true 时，Map 类型导出为 JSON Object 格式 {"key1": value1, "key2": value2}
+    /// 当为 false 时，Map 类型导出为二维数组格式 [[key1, value1], [key2, value2]]
+    /// 使用方法: -x json.mapAsObject=true
+    /// </summary>
+    public static bool UseMapAsObject => EnvManager.Current.GetBoolOptionOrDefault("json", "mapAsObject", true, false);
+
+    protected virtual JsonDataVisitor ImplJsonDataVisitor
+    {
+        get
+        {
+            var visitor = new JsonDataVisitor { MapAsObject = UseMapAsObject };
+            return visitor;
+        }
+    }
 
 
     public void WriteAsArray(List<Record> datas, Utf8JsonWriter x, JsonDataVisitor jsonDataVisitor)

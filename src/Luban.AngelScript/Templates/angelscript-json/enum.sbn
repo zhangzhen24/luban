@@ -1,0 +1,24 @@
+{{~
+    comment = __enum.comment
+    items = __enum.items
+~}}
+
+{{~if comment != '' ~}}
+/**
+ * {{escape_comment comment}}
+ */
+{{~end~}}
+UENUM()
+enum {{__name}}
+{
+    {{~ for item in items ~}}
+    {{~if item.comment != '' ~}}
+    /** {{escape_comment item.comment}} */
+    {{~end~}}
+    {{format_enum_item_name __code_style item.name}}{{if item.value != null}} = {{item.value}}{{end}},
+    {{~end~}}
+};
+
+// 枚举项数量常量
+const int32 {{__name}}_Count = {{items.size}};
+

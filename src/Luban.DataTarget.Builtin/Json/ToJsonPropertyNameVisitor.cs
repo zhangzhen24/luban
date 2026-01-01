@@ -64,6 +64,13 @@ public class ToJsonPropertyNameVisitor : IDataFuncVisitor<string>
 
     public string Accept(DEnum type)
     {
+        // 获取枚举项的名称（而非数值）以供 UE FJsonObjectConverter 正确解析 TMap<Enum, T>
+        var enumItem = type.Type.DefEnum.Items.FirstOrDefault(item => item.IntValue == type.Value);
+        if (enumItem != null)
+        {
+            return enumItem.Name;
+        }
+        // fallback: 如果找不到枚举项，使用数值
         return type.Value.ToString();
     }
 

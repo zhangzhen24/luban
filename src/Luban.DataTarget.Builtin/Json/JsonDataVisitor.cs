@@ -31,6 +31,12 @@ public class JsonDataVisitor : IDataActionVisitor<Utf8JsonWriter>
 {
     public static JsonDataVisitor Ins { get; } = new();
 
+    /// <summary>
+    /// 当为 true 时，Map 类型导出为 JSON Object 格式 {"key1": value1, "key2": value2}
+    /// 当为 false 时，Map 类型导出为二维数组格式 [[key1, value1], [key2, value2]]
+    /// </summary>
+    public bool MapAsObject { get; set; } = false;
+
     public void Accept(DBool type, Utf8JsonWriter x)
     {
         x.WriteBooleanValue(type.Value);
@@ -139,14 +145,31 @@ public class JsonDataVisitor : IDataActionVisitor<Utf8JsonWriter>
 
     public virtual void Accept(DMap type, Utf8JsonWriter x)
     {
-        x.WriteStartArray();
-        foreach (var d in type.DataMap)
+        if (MapAsObject)
         {
+            // Object 格式: {"key1": value1, "key2": value2}
+            // 适用于 UE FJsonObjectConverter 解析 TMap
+            x.WriteStartObject();
+            foreach (var d in type.DataMap)
+            {
+                // key 转换为字符串作为属性名
+                x.WritePropertyName(d.Key.Apply(ToJsonPropertyNameVisitor.Ins));
+                d.Value.Apply(this, x);
+            }
+            x.WriteEndObject();
+        }
+        else
+        {
+            // 二维数组格式: [[key1, value1], [key2, value2]]
             x.WriteStartArray();
-            d.Key.Apply(this, x);
-            d.Value.Apply(this, x);
+            foreach (var d in type.DataMap)
+            {
+                x.WriteStartArray();
+                d.Key.Apply(this, x);
+                d.Value.Apply(this, x);
+                x.WriteEndArray();
+            }
             x.WriteEndArray();
         }
-        x.WriteEndArray();
     }
 }

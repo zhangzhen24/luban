@@ -11,27 +11,9 @@ class UCfgMgr : UScriptGameInstanceSubsystem
     {{~
         cfg_name = table.value_ttype.def_bean.name
         struct_type_name = declaring_type_name table.value_ttype
-        is_union = table.is_union_index
-        # 检查 index_list 是否有多个元素（联合主键需要至少2个字段）
-        has_multiple_indexes = false
-        index_count = 0
-        for idx in table.index_list
-            index_count = index_count + 1
-            if index_count > 1
-                has_multiple_indexes = true
-                break
-            end
-        end
-        is_real_union = is_union && has_multiple_indexes
-        # 判断 TMap 的 Key 类型：所有非 int32 单主键和联合主键都使用 FString
-        if is_real_union
-            map_key_type = 'FString'
-        else
-            # 所有单主键都使用 FString 作为 TMap 的 key
-            map_key_type = 'FString'
-        end
+        map_key_type = get_map_key_type table
     ~}}
-    UPROPERTY(BlueprintReadOnly, Category = "Config")
+    UPROPERTY()
     TMap<{{map_key_type}}, {{struct_type_name}}> {{format_property_name __code_style table.name}}Map;
     {{~end~}}
 
@@ -49,27 +31,26 @@ class UCfgMgr : UScriptGameInstanceSubsystem
     {
     }
 
+    // 可重写此函数以自定义配置目录
+    UFUNCTION()
+    FString GetConfigDirectory()
+    {
+        return FPaths::CombinePaths(FPaths::ProjectConfigDir(), "gen");
+    }
+
     UFUNCTION()
     void LoadConfigs()
     {
-        FString JsonDirectory = FPaths::CombinePaths(FPaths::ProjectConfigDir(), "gen");
+        FString JsonDirectory = GetConfigDirectory();
         if (!FPaths::DirectoryExists(JsonDirectory))
         {
-            Error("[CfgMgr] JsonDirectory not found: " + JsonDirectory);
+            Error("[CfgMgr] Config directory not found: " + JsonDirectory);
             return;
         }
 
-        TArray<FString> JsonFiles;
-        if (!NamiFilePath::FindFiles(JsonFiles, JsonDirectory, "*.json", true, true, true))
-        {
-            Error("[CfgMgr] ListDirectory failed: " + JsonDirectory);
-            return;
-        }
-
-        for (FString JsonFile : JsonFiles)
-        {
-            ParseJsonFile(JsonFile);
-        }
+        {{~for table in __tables ~}}
+        LoadTable_{{table.name}}(JsonDirectory);
+        {{~end~}}
     }
 
     {{~for table in __tables ~}}
@@ -77,180 +58,88 @@ class UCfgMgr : UScriptGameInstanceSubsystem
         cfg_name = table.value_ttype.def_bean.name
         struct_type_name = declaring_type_name table.value_ttype
         value_var_name = cfg_name
-        is_union = table.is_union_index
-        # 确保只有真正的联合主键（index_list 长度 > 1）才生成 Make 函数
-        # 检查 index_list 是否有多个元素（联合主键需要至少2个字段）
-        has_multiple_indexes = false
-        index_count = 0
-        for idx in table.index_list
-            index_count = index_count + 1
-            if index_count > 1
-                has_multiple_indexes = true
-                break
-            end
-        end
-        is_real_union = is_union && has_multiple_indexes
-        # 判断 TMap 的 Key 类型
-        if is_real_union
-            map_key_type = 'FString'
-            # 生成 MakeXX 函数
-            make_func_name = 'Make' + cfg_name + 'Key'
-            # 生成参数列表
-            param_array = table.index_list | array.each do; ret (declaring_type_name $0.type) + ' ' + (format_property_name __code_style $0.index_field.name); end
-            param_list = array.join param_array ', '
-            # 生成拼接逻辑
-            key_parts = table.index_list | array.each do; ret (format_property_name __code_style $0.index_field.name); end
-            # 生成 Get 函数参数列表
-            get_param_list = param_list
-        else
-            key_type_name = declaring_type_name table.key_ttype
-            # 所有单主键都使用 FString 作为 TMap 的 key
-            map_key_type = 'FString'
-            # 保持原始类型作为参数类型，在 Get 函数中会转换为 FString
-            get_param_list = key_type_name + ' ID'
-        end
+        map_key_type = get_map_key_type table
+        is_real_union = is_union_key table
     ~}}
     {{~if is_real_union ~}}
-    // 生成联合主键的 Make 函数
-    UFUNCTION(BlueprintPure)
-    FString {{make_func_name}}({{param_list}})
+    // 联合主键的 Make 函数
+    UFUNCTION()
+    FString Make{{cfg_name}}Key({{union_key_params table __code_style}})
     {
-        {{~
-            # 为每个 key_part 生成格式化字符串转换
-            key_parts_formatted = table.index_list | array.each do
-                field_name = format_property_name __code_style $0.index_field.name
-                field_type = declaring_type_name $0.type
-                # 如果已经是 FString，直接使用，否则使用 f"{}" 格式化
-                if field_type == 'FString'
-                    ret field_name
-                else
-                    # 生成 f"{field_name}"，使用字符串拼接
-                    ret 'f"{' + field_name + '}"'
-                end
-            end
-            key_parts_str = array.join key_parts_formatted ' + "_" + '
-        ~}}
-        return {{key_parts_str}};
-    }
-
-    {{~end~}}
-    UFUNCTION(BlueprintPure)
-    bool Get{{cfg_name}}({{get_param_list}}, {{struct_type_name}}&out {{value_var_name}})
-    {
-        {{~if is_real_union ~}}
-        FString Key = {{make_func_name}}({{array.join (table.index_list | array.each do; ret (format_property_name __code_style $0.index_field.name); end) ', '}});
-        {{~else~}}
-        {{~
-            # 所有单主键都转换为 FString
-            key_type_name = declaring_type_name table.key_ttype
-            if key_type_name == 'FString'
-                key_expr = 'ID'
-            else
-                # 生成 f"{ID}"，使用字符串拼接
-                key_expr = 'f"{' + 'ID' + '}"'
-            end
-        ~}}
-        FString Key = {{key_expr}};
-        {{~end~}}
-        if ({{format_property_name __code_style table.name}}Map.Contains(Key))
-        {
-            {{value_var_name}} = {{format_property_name __code_style table.name}}Map[Key];
-            return true;
-        }
-        return false;
+        return {{make_union_key_from_params table __code_style}};
     }
 
     {{~end~}}
     UFUNCTION()
-    private void ParseJsonFile(FString JsonFile)
+    {{~if is_real_union ~}}
+    bool Get{{cfg_name}}({{union_key_params table __code_style}}, {{struct_type_name}}&out Result)
     {
+        FString Key = Make{{cfg_name}}Key({{union_key_param_names table __code_style}});
+        if ({{format_property_name __code_style table.name}}Map.Contains(Key))
+        {
+            Result = {{format_property_name __code_style table.name}}Map[Key];
+            return true;
+        }
+        return false;
+    }
+    {{~else~}}
+    bool Get{{cfg_name}}({{map_key_type}} ID, {{struct_type_name}}&out Result)
+    {
+        if ({{format_property_name __code_style table.name}}Map.Contains(ID))
+        {
+            Result = {{format_property_name __code_style table.name}}Map[ID];
+            return true;
+        }
+        return false;
+    }
+    {{~end~}}
+
+    {{~end~}}
+    {{~for table in __tables ~}}
+    {{~
+        cfg_name = table.value_ttype.def_bean.name
+        struct_type_name = declaring_type_name table.value_ttype
+        value_var_name = cfg_name
+        map_key_type = get_map_key_type table
+        is_real_union = is_union_key table
+    ~}}
+    UFUNCTION()
+    private void LoadTable_{{table.name}}(const FString& Directory)
+    {
+        FString JsonFile = FPaths::CombinePaths(Directory, "{{table.output_data_file}}.json");
+        if (!FPaths::FileExists(JsonFile))
+        {
+            Warning("[CfgMgr] Missing config file: " + JsonFile);
+            return;
+        }
+
         FString JsonContent;
-        if (!NamiFilePath::LoadFileToString(JsonFile, JsonContent))
+        if (!FFileHelper::LoadFileToString(JsonContent, JsonFile))
         {
             Error("[CfgMgr] Failed to load file: " + JsonFile);
             return;
         }
 
-        // 根据文件名判断配置类型
-        FString FileName = FPaths::GetBaseFilename(JsonFile);
-        {{~for table in __tables ~}}
-        {{~
-            cfg_name = table.value_ttype.def_bean.name
-            struct_type_name = declaring_type_name table.value_ttype
-            value_var_name = cfg_name
-            is_union = table.is_union_index
-            # 检查 index_list 是否有多个元素（联合主键需要至少2个字段）
-            has_multiple_indexes = false
-            index_count = 0
-            for idx in table.index_list
-                index_count = index_count + 1
-                if index_count > 1
-                    has_multiple_indexes = true
-                    break
-                end
-            end
-            is_real_union = is_union && has_multiple_indexes
-            # 判断 TMap 的 Key 类型：所有非 int32 单主键和联合主键都使用 FString
-            if is_real_union
-                map_key_type = 'FString'
-            else
-                # 所有单主键都使用 FString 作为 TMap 的 key
-                map_key_type = 'FString'
-            end
-        ~}}
-        if (FileName.Contains("{{table.output_data_file}}"))
+        {{format_property_name __code_style table.name}}Map.Empty();
+        {{struct_type_name}} TempItem;
+
+        TArray<FString> JsonArrayStrings;
+        if (NamiJson::JsonToArray(JsonContent, JsonArrayStrings))
         {
-            {{struct_type_name}} {{value_var_name}};
-            // 解析数组格式的 JSON
-            TArray<FString> JsonArrayStrings;
-            if (NamiJson::JsonToArray(JsonContent, JsonArrayStrings))
+            for (const FString& V : JsonArrayStrings)
             {
-                for (int32 i = 0; i < JsonArrayStrings.Num(); i++)
+                if (FJsonObjectConverter::JsonObjectStringToUStruct(V, TempItem))
                 {
-                    const FString& V = JsonArrayStrings[i];
-                    if (FJsonObjectConverter::JsonObjectStringToUStruct(V, {{value_var_name}}))
-                    {
-                        {{~if is_real_union ~}}
-                        // 联合主键：拼接所有主键字段
-                        {{~
-                            # 为每个 key_part 生成格式化字符串转换
-                            key_parts_formatted = table.index_list | array.each do
-                                field_path = value_var_name + '.' + (format_property_name __code_style $0.index_field.name)
-                                field_type = declaring_type_name $0.type
-                                # 如果已经是 FString，直接使用，否则使用 f"{}" 格式化
-                                if field_type == 'FString'
-                                    ret field_path
-                                else
-                                    # 生成 f"{field_path}"，使用字符串拼接
-                                    ret 'f"{' + field_path + '}"'
-                                end
-                            end
-                            key_parts_str = array.join key_parts_formatted ' + "_" + '
-                        ~}}
-                        FString Key = {{key_parts_str}};
-                        {{~else~}}
-                        // 单主键：根据类型进行转换，所有都转换为 FString
-                        {{~
-                            key_field = value_var_name + '.' + (format_property_name __code_style table.index_field.name)
-                            key_type_name = declaring_type_name table.key_ttype
-                            # 如果不是 FString，需要生成 f"{key_field}" 格式
-                            if key_type_name != 'FString'
-                                key_expr = 'f"{' + key_field + '}"'
-                            else
-                                key_expr = key_field
-                            end
-                        ~}}
-                        FString Key = {{key_expr}};
-                        {{~end~}}
-                        {{format_property_name __code_style table.name}}Map.Add(Key, {{value_var_name}});
-                    }
+                    {{~if is_real_union ~}}
+                    {{map_key_type}} Key = {{make_union_key_expr table 'TempItem' __code_style}};
+                    {{~else~}}
+                    {{map_key_type}} Key = {{make_single_key_expr table 'TempItem' __code_style}};
+                    {{~end~}}
+                    {{format_property_name __code_style table.name}}Map.Add(Key, TempItem);
                 }
             }
-            return;
         }
-        {{~end~}}
-        
-        Warning("[CfgMgr] Unknown config file type: " + FileName);
     }
-}
 
+    {{~end~}}
+}
