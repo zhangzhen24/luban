@@ -176,6 +176,7 @@ public class XmlSchemaLoader : SchemaLoaderBase
         "comment",
         "tags",
         "variants",
+        "default",
     };
 
     private static readonly List<string> _fieldRequireAttrs = new() { "name", "type" };
@@ -205,7 +206,8 @@ public class XmlSchemaLoader : SchemaLoaderBase
             XmlUtil.GetOptionalAttribute(e, "comment"),
             XmlUtil.GetOptionalAttribute(e, "tags"),
             XmlUtil.GetOptionalAttribute(e, "variants"),
-            false
+            false,
+            XmlUtil.GetOptionalAttribute(e, "default")
         );
     }
 

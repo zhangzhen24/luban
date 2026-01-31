@@ -75,6 +75,8 @@ public class DefField
 
     public RawField RawField { get; }
 
+    public string DefaultValue { get; }
+
 
     public DefField(DefBean host, RawField f, int idOffset)
     {
@@ -88,6 +90,7 @@ public class DefField
         IgnoreNameValidation = f.NotNameValidation;
         this.Groups = f.Groups;
         this.RawField = f;
+        this.DefaultValue = f.DefaultValue;
     }
 
     public override string ToString()

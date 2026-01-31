@@ -340,7 +340,15 @@ class SheetDataCreator : ITypeFuncVisitor<RowColumnSheet, TitleRow, DType>
             }
             try
             {
-                list.Add(f.CType.Apply(this, sheet, field));
+                // 如果字段为空且有 XML 定义的默认值，使用默认值
+                if (field.IsBlank && !string.IsNullOrEmpty(f.DefaultValue))
+                {
+                    list.Add(CreateFromDefaultValue(f.CType, f.DefaultValue, bean, f));
+                }
+                else
+                {
+                    list.Add(f.CType.Apply(this, sheet, field));
+                }
             }
             catch (DataCreateException dce)
             {
@@ -355,6 +363,73 @@ class SheetDataCreator : ITypeFuncVisitor<RowColumnSheet, TitleRow, DType>
             }
         }
         return list;
+    }
+
+    /// <summary>
+    /// 从 XML 定义的默认值字符串创建 DType 数据
+    /// </summary>
+    private DType CreateFromDefaultValue(TType type, string defaultValue, DefBean bean, DefField field)
+    {
+        try
+        {
+            return type switch
+            {
+                TBool => DBool.ValueOf(defaultValue.ToLower() == "true" || defaultValue == "1"),
+                TByte => DByte.ValueOf(byte.Parse(defaultValue)),
+                TShort => DShort.ValueOf(short.Parse(defaultValue)),
+                TInt => DInt.ValueOf(int.Parse(defaultValue)),
+                TLong => DLong.ValueOf(long.Parse(defaultValue)),
+                TFloat => DFloat.ValueOf(float.Parse(defaultValue)),
+                TDouble => DDouble.ValueOf(double.Parse(defaultValue)),
+                TString tString => DString.ValueOf(tString, defaultValue),
+                TEnum tEnum => new DEnum(tEnum, defaultValue),
+                TBean tBean => CreateBeanFromDefaultValue(tBean, defaultValue),
+                _ => throw new NotSupportedException($"类型 '{type}' 不支持 XML 默认值")
+            };
+        }
+        catch (Exception e)
+        {
+            throw new Exception($"无法将默认值 '{defaultValue}' 转换为类型 '{type}': {e.Message}", e);
+        }
+    }
+
+    /// <summary>
+    /// 从带分隔符的默认值字符串创建 Bean 数据
+    /// </summary>
+    private DBean CreateBeanFromDefaultValue(TBean type, string defaultValue)
+    {
+        var beanDef = type.DefBean;
+        string sep = beanDef.Sep;
+
+        if (string.IsNullOrEmpty(sep))
+        {
+            sep = ","; // 默认使用逗号分隔
+        }
+
+        var parts = defaultValue.Split(sep.ToCharArray(), StringSplitOptions.None);
+        var fields = beanDef.HierarchyFields;
+
+        if (parts.Length < fields.Count)
+        {
+            throw new Exception($"默认值 '{defaultValue}' 的元素数量({parts.Length})少于字段数量({fields.Count})");
+        }
+
+        var list = new List<DType>();
+        for (int i = 0; i < fields.Count; i++)
+        {
+            var f = fields[i];
+            var partValue = parts[i].Trim();
+
+            // 如果当前部分为空，检查字段是否有自己的默认值
+            if (string.IsNullOrEmpty(partValue) && !string.IsNullOrEmpty(f.DefaultValue))
+            {
+                partValue = f.DefaultValue;
+            }
+
+            list.Add(CreateFromDefaultValue(f.CType, partValue, beanDef, f));
+        }
+
+        return new DBean(type, beanDef, list);
     }
 
     public DType Accept(TBean type, RowColumnSheet sheet, TitleRow row)

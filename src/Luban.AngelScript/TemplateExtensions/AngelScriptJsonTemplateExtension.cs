@@ -51,6 +51,108 @@ public class AngelScriptJsonTemplateExtension : ScriptObject
     }
 
     /// <summary>
+    /// 获取字段的默认值，优先使用用户定义的默认值
+    /// </summary>
+    public static string GetFieldDefaultValue(DefField field)
+    {
+        if (!string.IsNullOrEmpty(field.DefaultValue))
+        {
+            return ParseDefaultValue(field.DefaultValue, field.CType);
+        }
+        return field.CType.Apply(DefaultValueVisitor.Ins);
+    }
+
+    /// <summary>
+    /// 将用户定义的默认值字符串转换为AngelScript格式
+    /// </summary>
+    private static string ParseDefaultValue(string defaultValue, TType type)
+    {
+        if (string.IsNullOrEmpty(defaultValue))
+        {
+            return type.Apply(DefaultValueVisitor.Ins);
+        }
+
+        return type switch
+        {
+            TBool => defaultValue.ToLower() == "true" || defaultValue == "1" ? "true" : "false",
+            TByte or TShort or TInt or TLong => defaultValue,
+            TFloat => defaultValue.Contains('.') ? $"{defaultValue}f" : $"{defaultValue}.0f",
+            TDouble => defaultValue.Contains('.') ? defaultValue : $"{defaultValue}.0",
+            TString => $"\"{defaultValue}\"",
+            TEnum enumType => ParseEnumDefault(defaultValue, enumType),
+            TBean beanType when beanType.DefBean.IsValueType => ParseValueTypeDefault(defaultValue, beanType),
+            _ => type.Apply(DefaultValueVisitor.Ins)
+        };
+    }
+
+    /// <summary>
+    /// 解析枚举类型的默认值
+    /// </summary>
+    private static string ParseEnumDefault(string defaultValue, TEnum enumType)
+    {
+        // 如果是数字，查找对应的枚举项
+        if (int.TryParse(defaultValue, out var intValue))
+        {
+            var item = enumType.DefEnum.Items.FirstOrDefault(i => i.IntValue == intValue);
+            if (item != null)
+            {
+                return $"{enumType.DefEnum.Name}::{item.Name}";
+            }
+        }
+        // 否则假设是枚举名称
+        return $"{enumType.DefEnum.Name}::{defaultValue}";
+    }
+
+    /// <summary>
+    /// 解析值类型(如vector3, vector4)的默认值
+    /// </summary>
+    private static string ParseValueTypeDefault(string defaultValue, TBean beanType)
+    {
+        var typeName = beanType.DefBean.Name;
+
+        // 检查是否有TypeMapper定义的类型映射
+        // 优先检查 "all" target (通用映射)，然后检查 angelscript 特定映射
+        var mapper = beanType.DefBean.TypeMappers?.FirstOrDefault(m =>
+            (m.Targets.Contains("all") || m.Targets.Contains("angelscript")) &&
+            m.CodeTargets.Contains("angelscript-json"));
+
+        if (mapper != null)
+        {
+            // 优先使用 "type" 选项，然后是 "name" 选项
+            if (mapper.Options.TryGetValue("type", out var mappedType))
+            {
+                typeName = mappedType;
+            }
+            else if (mapper.Options.TryGetValue("name", out var mappedName))
+            {
+                typeName = mappedName;
+            }
+        }
+
+        // 处理vector3: "0,0,0" -> FVector(0, 0, 0)
+        if (typeName == "FVector" || typeName == "vector3")
+        {
+            var parts = defaultValue.Split(',');
+            if (parts.Length == 3)
+            {
+                return $"FVector({parts[0].Trim()}, {parts[1].Trim()}, {parts[2].Trim()})";
+            }
+        }
+        // 处理vector4: "0,0,0,0" -> FVector4(0, 0, 0, 0)
+        else if (typeName == "FVector4" || typeName == "vector4")
+        {
+            var parts = defaultValue.Split(',');
+            if (parts.Length == 4)
+            {
+                return $"FVector4({parts[0].Trim()}, {parts[1].Trim()}, {parts[2].Trim()}, {parts[3].Trim()})";
+            }
+        }
+
+        // 其他值类型返回空字符串，让编译器使用默认构造函数
+        return "";
+    }
+
+    /// <summary>
     /// 获取 TMap 的 Key 类型
     /// 联合主键使用 FString，单主键根据类型决定
     /// </summary>

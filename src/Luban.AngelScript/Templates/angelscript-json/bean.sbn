@@ -16,7 +16,7 @@ struct F{{__name}}
     {{~ for field in hierarchy_export_fields
         fieldName = format_property_name __code_style field.name
         fieldType = declaring_type_name field.ctype
-        default_val = default_value field.ctype
+        default_val = get_field_default_value field
      ~}}
     {{~if field.comment != '' ~}}
     /** {{escape_comment field.comment}} */
