@@ -28,15 +28,22 @@ using Scriban;
 
 namespace Luban.Typescript.CodeTarget;
 
-[CodeTarget("typescript-ue-json")]
-public class TypescriptUeJsonCodeTarget : TemplateCodeTargetBase
+/// <summary>
+/// TypeScript code target for Puerts (UE TypeScript plugin)
+/// Generates clean, UE-style TypeScript code with:
+/// - PascalCase for types/classes
+/// - camelCase for fields/properties
+/// - Simple CfgMgr similar to AngelScript style
+/// </summary>
+[CodeTarget("typescript-puerts")]
+public class TypescriptPuertsCodeTarget : TemplateCodeTargetBase
 {
-    private static readonly ICodeStyle s_ueCodeStyle = new ConfigurableCodeStyle(
-        "pascal",  // namespace - 大驼峰
-        "pascal",  // type - 大驼峰（类名）
-        "pascal",  // method - 大驼峰（UE 方法风格）
-        "camel",   // property - 小驼峰
-        "camel",   // field - 小驼峰
+    private static readonly ICodeStyle s_puertsCodeStyle = new ConfigurableCodeStyle(
+        "camel",   // namespace - camelCase (用于文件名)
+        "pascal",  // type - PascalCase (类名)
+        "pascal",  // method - PascalCase (方法名)
+        "camel",   // property - camelCase (属性)
+        "camel",   // field - camelCase (字段)
         "none"     // enumItem - 保持原样
     );
 
@@ -44,7 +51,7 @@ public class TypescriptUeJsonCodeTarget : TemplateCodeTargetBase
 
     protected override string FileSuffixName => "ts";
 
-    protected override ICodeStyle DefaultCodeStyle => s_ueCodeStyle;
+    protected override ICodeStyle DefaultCodeStyle => s_puertsCodeStyle;
 
     private static readonly HashSet<string> s_preservedKeyWords = new()
     {
@@ -60,12 +67,26 @@ public class TypescriptUeJsonCodeTarget : TemplateCodeTargetBase
     protected override void OnCreateTemplateContext(TemplateContext ctx)
     {
         ctx.PushGlobal(new TypescriptCommonTemplateExtension());
-        ctx.PushGlobal(new TypescriptUeJsonTemplateExtension());
+        ctx.PushGlobal(new TypescriptPuertsTemplateExtension());
+    }
+
+    /// <summary>
+    /// Get filename for a namespace (PascalCase + Cfg suffix)
+    /// </summary>
+    private static string GetFileName(string ns)
+    {
+        if (string.IsNullOrEmpty(ns))
+        {
+            return "CommonCfg";
+        }
+        var name = ns.Split('.').Last();
+        // Use PascalCase: first letter uppercase
+        return char.ToUpper(name[0]) + name.Substring(1) + "Cfg";
     }
 
     public override void Handle(GenerationContext ctx, OutputFileManifest manifest)
     {
-        // Generate UCfgMgr file
+        // Generate CfgMgr file
         string outputFile = EnvManager.Current.GetOptionOrDefault(Name, "outputFile", true, $"CfgMgr.{FileSuffixName}");
         var tablesTask = Task.Run(() =>
         {
@@ -111,11 +132,7 @@ public class TypescriptUeJsonCodeTarget : TemplateCodeTargetBase
                 var writer = new CodeWriter();
                 GenerateNamespaceGroup(ctx, group, writer);
 
-                // Use namespace as filename, or "Common" if namespace is empty
-                string fileName = string.IsNullOrEmpty(group.Namespace)
-                    ? "Common"
-                    : group.Namespace.Split('.').Last();
-
+                string fileName = GetFileName(group.Namespace);
                 return CreateOutputFile($"{fileName}.{FileSuffixName}", writer.ToResult(FileHeader));
             }));
         }
@@ -129,41 +146,19 @@ public class TypescriptUeJsonCodeTarget : TemplateCodeTargetBase
 
     private void GenerateNamespaceGroup(GenerationContext ctx, NamespaceGroup group, CodeWriter writer)
     {
-        // Sort enums by name for consistent output
         var sortedEnums = group.Enums.OrderBy(e => e.Name).ToList();
-        // Sort beans by name for consistent output
         var sortedBeans = group.Beans.OrderBy(b => b.Name).ToList();
 
-        // Collect dependencies from other namespaces
-        var dependencies = CollectDependencies(group, sortedBeans);
-
-        // Generate import statements for dependencies
-        foreach (var dep in dependencies.OrderBy(d => d.Key))
+        // Collect all imports from beans first
+        var imports = CollectImports(group.Namespace, sortedBeans);
+        if (imports.Count > 0)
         {
-            string fileName = string.IsNullOrEmpty(dep.Key) ? "Common" : dep.Key.Split('.').Last();
-            if (string.IsNullOrEmpty(dep.Key))
+            foreach (var import in imports.OrderBy(i => i.Key))
             {
-                // Import from Common.ts (no namespace wrapper)
-                var typeNames = string.Join(", ", dep.Value.OrderBy(t => t));
-                writer.Write($"import {{ {typeNames} }} from \"./{fileName}\"");
+                var typeNames = string.Join(", ", import.Value.OrderBy(t => t));
+                writer.Write($"import {{ {typeNames} }} from \"./{import.Key}\"");
             }
-            else
-            {
-                // Import namespace from file
-                writer.Write($"import {{ {dep.Key} }} from \"./{fileName}\"");
-            }
-        }
-
-        if (dependencies.Count > 0)
-        {
             writer.Write("");
-        }
-
-        // Add namespace wrapper if namespace is not empty
-        bool hasNamespace = !string.IsNullOrEmpty(group.Namespace);
-        if (hasNamespace)
-        {
-            writer.Write($"export namespace {group.Namespace} {{");
         }
 
         // Generate enums first
@@ -176,21 +171,111 @@ public class TypescriptUeJsonCodeTarget : TemplateCodeTargetBase
             }
         }
 
-        // Then generate beans
+        // Then generate beans (without individual imports)
         for (int i = 0; i < sortedBeans.Count; i++)
         {
-            GenerateBean(ctx, sortedBeans[i], writer);
+            GenerateBeanWithoutImports(ctx, sortedBeans[i], writer);
             if (i < sortedBeans.Count - 1)
             {
                 writer.Write("");
             }
         }
+    }
 
-        // Close namespace
-        if (hasNamespace)
+    private void GenerateBeanWithoutImports(GenerationContext ctx, DefBean bean, CodeWriter writer)
+    {
+        // Generate bean comment
+        if (!string.IsNullOrEmpty(bean.Comment))
         {
-            writer.Write("}");
+            writer.Write("/**");
+            writer.Write($" * {bean.Comment}");
+            writer.Write(" */");
         }
+
+        writer.Write($"export class {bean.Name} {{");
+
+        foreach (var field in bean.HierarchyExportFields)
+        {
+            var fieldName = CodeStyle.FormatField(field.Name);
+            var fieldType = field.CType.Apply(Luban.Typescript.TypeVisitors.PuertsDeclaringTypeNameVisitor.Ins);
+            var fieldDefault = field.CType.Apply(Luban.Typescript.TypeVisitors.PuertsDefaultValueVisitor.Ins);
+
+            if (!string.IsNullOrEmpty(field.Comment))
+            {
+                writer.Write($"    /** {field.Comment} */");
+            }
+            writer.Write($"    {fieldName}: {fieldType} = {fieldDefault}");
+        }
+
+        writer.Write("}");
+    }
+
+    private Dictionary<string, HashSet<string>> CollectImports(string currentNs, List<DefBean> beans)
+    {
+        var imports = new Dictionary<string, HashSet<string>>();
+        var currentFileName = GetFileName(currentNs);
+
+        foreach (var bean in beans)
+        {
+            foreach (var field in bean.HierarchyExportFields)
+            {
+                CollectExternalTypes(field.CType, currentNs, currentFileName, imports);
+            }
+        }
+
+        return imports;
+    }
+
+    private void CollectExternalTypes(TType type, string currentNs, string currentFileName, Dictionary<string, HashSet<string>> imports)
+    {
+        switch (type)
+        {
+            case TBean beanType:
+                var beanNs = beanType.DefBean.Namespace ?? "";
+                if (beanNs != currentNs)
+                {
+                    var fileName = GetFileName(beanNs);
+                    if (fileName != currentFileName)
+                    {
+                        AddImport(imports, fileName, beanType.DefBean.Name);
+                    }
+                }
+                break;
+            case TEnum enumType:
+                var enumNs = enumType.DefEnum.Namespace ?? "";
+                if (enumNs != currentNs)
+                {
+                    var fileName = GetFileName(enumNs);
+                    if (fileName != currentFileName)
+                    {
+                        AddImport(imports, fileName, enumType.DefEnum.Name);
+                    }
+                }
+                break;
+            case TArray arrayType:
+                CollectExternalTypes(arrayType.ElementType, currentNs, currentFileName, imports);
+                break;
+            case TList listType:
+                CollectExternalTypes(listType.ElementType, currentNs, currentFileName, imports);
+                break;
+            case TSet setType:
+                CollectExternalTypes(setType.ElementType, currentNs, currentFileName, imports);
+                break;
+            case TMap mapType:
+                CollectExternalTypes(mapType.KeyType, currentNs, currentFileName, imports);
+                CollectExternalTypes(mapType.ValueType, currentNs, currentFileName, imports);
+                break;
+        }
+    }
+
+    private static void AddImport(Dictionary<string, HashSet<string>> imports, string fileName, string typeName)
+    {
+        if (!imports.TryGetValue(fileName, out var types))
+        {
+            types = new HashSet<string>();
+            imports[fileName] = types;
+        }
+        types.Add(typeName);
     }
 
     private class NamespaceGroup
@@ -198,85 +283,5 @@ public class TypescriptUeJsonCodeTarget : TemplateCodeTargetBase
         public string Namespace { get; set; } = "";
         public List<DefEnum> Enums { get; set; } = new();
         public List<DefBean> Beans { get; set; } = new();
-    }
-
-    /// <summary>
-    /// Collect dependencies from other namespaces used in beans
-    /// </summary>
-    /// <param name="group">Current namespace group</param>
-    /// <param name="beans">Beans in this group</param>
-    /// <returns>Dictionary of namespace -> set of type names</returns>
-    private Dictionary<string, HashSet<string>> CollectDependencies(NamespaceGroup group, List<DefBean> beans)
-    {
-        var dependencies = new Dictionary<string, HashSet<string>>();
-
-        foreach (var bean in beans)
-        {
-            CollectTypeDependencies(bean, group.Namespace, dependencies);
-        }
-
-        return dependencies;
-    }
-
-    private void CollectTypeDependencies(DefBean bean, string currentNamespace, Dictionary<string, HashSet<string>> dependencies)
-    {
-        // Check parent type
-        if (bean.ParentDefType != null)
-        {
-            AddDependencyIfNeeded(bean.ParentDefType.Namespace, bean.ParentDefType.Name, currentNamespace, dependencies);
-        }
-
-        // Check all fields
-        foreach (var field in bean.HierarchyExportFields)
-        {
-            CollectFieldTypeDependencies(field.CType, currentNamespace, dependencies);
-        }
-    }
-
-    private void CollectFieldTypeDependencies(TType type, string currentNamespace, Dictionary<string, HashSet<string>> dependencies)
-    {
-        switch (type)
-        {
-            case TBean beanType:
-                AddDependencyIfNeeded(beanType.DefBean.Namespace, beanType.DefBean.Name, currentNamespace, dependencies);
-                break;
-            case TEnum enumType:
-                AddDependencyIfNeeded(enumType.DefEnum.Namespace, enumType.DefEnum.Name, currentNamespace, dependencies);
-                break;
-            case TArray arrayType:
-                CollectFieldTypeDependencies(arrayType.ElementType, currentNamespace, dependencies);
-                break;
-            case TList listType:
-                CollectFieldTypeDependencies(listType.ElementType, currentNamespace, dependencies);
-                break;
-            case TSet setType:
-                CollectFieldTypeDependencies(setType.ElementType, currentNamespace, dependencies);
-                break;
-            case TMap mapType:
-                CollectFieldTypeDependencies(mapType.KeyType, currentNamespace, dependencies);
-                CollectFieldTypeDependencies(mapType.ValueType, currentNamespace, dependencies);
-                break;
-        }
-    }
-
-    private void AddDependencyIfNeeded(string typeNamespace, string typeName, string currentNamespace, Dictionary<string, HashSet<string>> dependencies)
-    {
-        // Normalize empty namespace
-        typeNamespace = typeNamespace ?? "";
-        currentNamespace = currentNamespace ?? "";
-
-        // Don't add dependency if same namespace
-        if (typeNamespace == currentNamespace)
-        {
-            return;
-        }
-
-        if (!dependencies.TryGetValue(typeNamespace, out var typeSet))
-        {
-            typeSet = new HashSet<string>();
-            dependencies[typeNamespace] = typeSet;
-        }
-
-        typeSet.Add(typeName);
     }
 }

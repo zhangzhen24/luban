@@ -1,0 +1,133 @@
+{{~## CfgMgr - Configuration Manager for Puerts ~}}
+{{generate_imports __tables}}
+type JsonLoader = (file: string) => any[]
+
+// 配置类型构造函数
+type CfgClass<T> = new () => T
+
+// 配置类型信息
+interface CfgTypeInfo<T> {
+    map: Map<any, T>
+    keyField: string
+}
+
+/**
+ * 配置管理器
+ * 自动生成，请勿手动修改
+ */
+export class CfgMgr {
+    private static _instance: CfgMgr | undefined
+
+    // 类型注册表
+    private _typeRegistry: Map<CfgClass<any>, CfgTypeInfo<any>> = new Map()
+
+    {{~for table in __tables ~}}
+    {{~
+        value_type = table.value_ttype
+        cfg_name = value_type.def_bean.name
+        struct_type_name = cfg_name
+        map_key_type = get_map_key_type table
+        table_field_name = format_field_name __code_style table.name
+    ~}}
+    {{~if table.comment != '' ~}}
+    /** {{escape_comment table.comment}} */
+    {{~end~}}
+    private _{{table_field_name}}Map: Map<{{map_key_type}}, {{struct_type_name}}> = new Map()
+    {{~end~}}
+
+    private constructor() {
+        // 注册所有配置类型
+        {{~for table in __tables ~}}
+        {{~
+            value_type = table.value_ttype
+            cfg_name = value_type.def_bean.name
+            table_field_name = format_field_name __code_style table.name
+            key_field_name = get_single_key_field_name table __code_style
+        ~}}
+        this._typeRegistry.set({{cfg_name}}, { map: this._{{table_field_name}}Map, keyField: '{{key_field_name}}' })
+        {{~end~}}
+    }
+
+    /**
+     * 获取单例实例
+     */
+    public static get(): CfgMgr {
+        if (!CfgMgr._instance) {
+            throw new Error('CfgMgr not initialized. Call CfgMgr.initialize() first.')
+        }
+        return CfgMgr._instance
+    }
+
+    /**
+     * 初始化配置管理器
+     * @param loader JSON 加载函数
+     * @param basePath 配置文件基础路径
+     */
+    public static initialize(loader: JsonLoader, basePath: string = ''): CfgMgr {
+        if (!CfgMgr._instance) {
+            CfgMgr._instance = new CfgMgr()
+            CfgMgr._instance.loadConfigs(loader, basePath)
+        }
+        return CfgMgr._instance
+    }
+
+    /**
+     * 动态获取配置数据
+     * @param cfgClass 配置类型
+     * @param key 主键值
+     * @example CfgMgr.get().getDynamicData(CreateCharacterCfg, 10001)
+     */
+    public getDynamicData<T>(cfgClass: CfgClass<T>, key: any): T | undefined {
+        const typeInfo = this._typeRegistry.get(cfgClass)
+        if (!typeInfo) {
+            throw new Error(`Config type not registered: ${cfgClass.name}`)
+        }
+        return typeInfo.map.get(key)
+    }
+
+    /**
+     * 动态获取配置 Map
+     * @param cfgClass 配置类型
+     * @example CfgMgr.get().getDynamicMap(CreateCharacterCfg)
+     */
+    public getDynamicMap<T>(cfgClass: CfgClass<T>): Map<any, T> {
+        const typeInfo = this._typeRegistry.get(cfgClass)
+        if (!typeInfo) {
+            throw new Error(`Config type not registered: ${cfgClass.name}`)
+        }
+        return typeInfo.map
+    }
+
+    /**
+     * 加载所有配置
+     */
+    private loadConfigs(loader: JsonLoader, basePath: string): void {
+        const getPath = (file: string) => basePath ? `${basePath}/${file}` : file
+        {{~for table in __tables ~}}
+        this.loadTable_{{table.name}}(loader(getPath('{{table.output_data_file}}.json')))
+        {{~end~}}
+    }
+
+    {{~for table in __tables ~}}
+    {{~
+        value_type = table.value_ttype
+        cfg_name = value_type.def_bean.name
+        struct_type_name = cfg_name
+        map_key_type = get_map_key_type table
+        is_real_union = is_union_key table
+        table_field_name = format_field_name __code_style table.name
+    ~}}
+    private loadTable_{{table.name}}(jsonArray: any[]): void {
+        this._{{table_field_name}}Map.clear()
+        for (const json of jsonArray) {
+            const item = json as {{struct_type_name}}
+            {{~if is_real_union ~}}
+            const key = {{make_union_key_expr table 'item' __code_style}}
+            {{~else~}}
+            const key = {{make_single_key_expr table 'item' __code_style}}
+            {{~end~}}
+            this._{{table_field_name}}Map.set(key, item)
+        }
+    }
+    {{~end~}}
+}

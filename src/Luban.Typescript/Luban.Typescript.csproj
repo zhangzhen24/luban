@@ -67,6 +67,15 @@
       <None Update="Templates\typescript-ue-json\tables.sbn">
         <CopyToOutputDirectory>Always</CopyToOutputDirectory>
       </None>
+      <None Update="Templates\typescript-puerts\bean.sbn">
+        <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+      </None>
+      <None Update="Templates\typescript-puerts\enum.sbn">
+        <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+      </None>
+      <None Update="Templates\typescript-puerts\tables.sbn">
+        <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+      </None>
     </ItemGroup>
 
 </Project>

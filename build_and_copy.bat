@@ -7,7 +7,7 @@ echo.
 
 set LUBAN_SRC_DIR=%~dp0src
 set BUILD_CONFIG=Release
-set TARGET_DIR=F:\Projects\EmberGuardian\trunk\Tools\Exe\Luban
+set TARGET_DIR=F:\Projects\Sura\DataConfigs\Exe\Luban
 
 cd /d "%LUBAN_SRC_DIR%"
 

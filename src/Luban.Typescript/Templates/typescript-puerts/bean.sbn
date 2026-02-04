@@ -1,0 +1,22 @@
+{{~
+    parent_def_type = __bean.parent_def_type
+    export_fields = __bean.export_fields
+    hierarchy_export_fields = __bean.hierarchy_export_fields
+~}}
+{{generate_bean_imports __bean}}{{~if __bean.comment != '' ~}}
+/**
+ * {{escape_comment __bean.comment}}
+ */
+{{~end~}}
+export class {{__name}} {
+    {{~ for field in hierarchy_export_fields
+        fieldName = format_field_name __code_style field.name
+        fieldType = declaring_type_name field.ctype
+        fieldDefault = default_value field.ctype
+     ~}}
+    {{~if field.comment != '' ~}}
+    /** {{escape_comment field.comment}} */
+    {{~end~}}
+    {{fieldName}}: {{fieldType}} = {{fieldDefault}}
+    {{~end~}}
+}
